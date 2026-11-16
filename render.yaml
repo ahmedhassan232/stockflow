@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: stockflow-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./infrastructure/docker/Dockerfile.backend
+    dockerContext: ./backend
+    healthCheckPath: /api/v1/health/live
+    dockerCommand: >-
+      sh -c "celery -A app.tasks.celery_app worker -B -c 1 --loglevel=INFO
+      --schedule=/tmp/celerybeat-schedule &
+      exec uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+      --proxy-headers --forwarded-allow-ips '*'"
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: stockflow-redis
+          property: connectionString
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: https://stockflow-murex-tau.vercel.app
+      - key: FRONTEND_URL
+        value: https://stockflow-murex-tau.vercel.app
+      - key: DB_POOL_SIZE
+        value: "3"
+      - key: DB_MAX_OVERFLOW
+        value: "2"
+
+  - type: keyvalue
+    name: stockflow-redis
+    plan: free
+    region: frankfurt
+    ipAllowList: []
