@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* StockFlow design tokens (HSL triplets). Navy primary, royal-blue secondary. */
+@layer base {
+  :root {
+    --background: 220 20% 96%;
+    --foreground: 220 55% 13%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 55% 13%;
+    --primary: 220 61% 15%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 221 78% 48%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 220 18% 92%;
+    --muted-foreground: 220 14% 40%;
+    --accent: 221 80% 95%;
+    --accent-foreground: 221 78% 36%;
+    --success: 152 62% 30%;
+    --warning: 32 92% 38%;
+    --danger: 0 70% 45%;
+    --info: 211 85% 42%;
+    --border: 220 16% 87%;
+    --ring: 221 78% 48%;
+    --radius: 0.75rem;
+  }
+  .dark {
+    --background: 222 40% 8%;
+    --foreground: 220 25% 92%;
+    --card: 222 36% 12%;
+    --card-foreground: 220 25% 92%;
+    --primary: 221 83% 62%;
+    --primary-foreground: 222 45% 9%;
+    --secondary: 221 83% 62%;
+    --secondary-foreground: 222 45% 9%;
+    --muted: 222 28% 17%;
+    --muted-foreground: 220 14% 68%;
+    --accent: 222 40% 19%;
+    --accent-foreground: 220 90% 80%;
+    --success: 152 55% 55%;
+    --warning: 38 92% 60%;
+    --danger: 0 80% 68%;
+    --info: 211 90% 68%;
+    --border: 222 24% 22%;
+    --ring: 221 83% 62%;
+  }
+  * { @apply border-border; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { @apply bg-background font-sans text-foreground antialiased; overflow-x: hidden; }
+  :focus-visible { @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background; }
+}
+
+/* Printing an invoice: only the receipt is printed, not the application chrome. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: fixed;
+    inset: 0 auto auto 0;
+    width: 80mm;
+    padding: 4mm;
+    color: #000;
+    background: #fff;
+  }
+}

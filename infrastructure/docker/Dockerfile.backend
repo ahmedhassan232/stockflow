@@ -1,0 +1,33 @@
+# Build context: ./backend
+# libpango/harfbuzz + Noto fonts: needed by WeasyPrint to shape Arabic text in PDFs.
+FROM python:3.12-slim AS base
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+        libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b fonts-noto-core \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10001 --home-dir /app stockflow \
+    && mkdir -p /var/lib/stockflow/storage && chown stockflow /var/lib/stockflow/storage
+
+# ── development: editable install + dev tools, source is bind-mounted ──
+FROM base AS dev
+COPY pyproject.toml ./
+COPY app ./app
+RUN pip install -e ".[dev]"
+COPY . .
+USER stockflow
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+# ── production: runtime dependencies only, non-root ──
+FROM base AS prod
+COPY pyproject.toml ./
+COPY app ./app
+RUN pip install .
+COPY alembic.ini ./
+COPY migrations ./migrations
+USER stockflow
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD curl -fsS http://127.0.0.1:8000/api/v1/health/live || exit 1
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--proxy-headers", "--forwarded-allow-ips", "*"]

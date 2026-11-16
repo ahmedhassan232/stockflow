@@ -1,0 +1,61 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env: { POSTGRES_PASSWORD: postgres }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      # CI-only throwaway credentials for the ephemeral service containers.
+      PGPASSWORD: postgres
+      DB_OWNER_PASSWORD: ci-owner
+      DB_APP_PASSWORD: ci-app
+      TEST_DATABASE_URL: postgresql+psycopg://stockflow_app:ci-app@localhost:5432/stockflow_test
+      TEST_MIGRATION_DATABASE_URL: postgresql+psycopg://stockflow_owner:ci-owner@localhost:5432/stockflow_test
+      DATABASE_URL: postgresql+psycopg://stockflow_app:ci-app@localhost:5432/stockflow
+      REDIS_URL: redis://localhost:6379/0
+      CORS_ORIGINS: http://localhost:5173
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip, cache-dependency-path: backend/pyproject.toml }
+      - name: Create least-privilege roles and databases
+        run: PGHOST=localhost POSTGRES_USER=postgres bash infrastructure/docker/postgres/10-init-roles.sh
+      - run: pip install -e "backend[dev]"
+      - run: ruff check . && ruff format --check .
+        working-directory: backend
+      - run: pytest
+        working-directory: backend
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: frontend } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: frontend/package-lock.json }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env
+      - run: docker compose config -q && docker compose -f docker-compose.prod.yml config -q
+      - run: docker compose build backend frontend
