@@ -1,4 +1,7 @@
+import hashlib
+import hmac
 import logging
+import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -10,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import rate_limit
 from app.core.config import Settings
-from app.core.email import Email, deliver
+from app.core.email import Email, deliver, deliver_direct
 from app.core.exceptions import (
     AppError,
     ConflictError,
@@ -394,12 +397,17 @@ class AuthService:
     # ───────────────────────── passwords ─────────────────────────
 
     async def forgot_password(self, email: str) -> None:
-        """Always succeeds from the caller's point of view (no account enumeration)."""
+        """Send a short-lived OTP without revealing whether an account exists."""
+        normalized = email.lower()
+        await rate_limit.hit(
+            self.redis, "password-reset-request", normalized, limit=3, window=3600
+        )
         user = (
-            await self.db.execute(select(User).where(User.email == email.lower()))
+            await self.db.execute(select(User).where(User.email == normalized))
         ).scalar_one_or_none()
         if user is None or not user.is_active:
             return
+
         now = datetime.now(UTC)
         await self.db.execute(
             update(PasswordResetToken)
@@ -410,50 +418,78 @@ class AuthService:
             )
             .values(used_at=now)
         )
-        raw, digest = security.new_opaque_token()
-        ttl = self.settings.password_reset_ttl_minutes
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        digest = hmac.new(
+            self.settings.jwt_secret_key.encode(),
+            f"{user.id}:{code}".encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        ttl = 10
         self.db.add(
             PasswordResetToken(
-                user_id=user.id, token_hash=digest, expires_at=now + timedelta(minutes=ttl)
+                user_id=user.id,
+                token_hash=digest,
+                purpose="password_reset",
+                expires_at=now + timedelta(minutes=ttl),
             )
         )
         await self.db.flush()
-        link = f"{self.settings.frontend_url.rstrip('/')}/reset-password?token={raw}"
-        deliver(
+        await deliver_direct(
             Email(
                 to=user.email,
-                subject="StockFlow – إعادة تعيين كلمة المرور / Reset your password",
+                subject="StockFlow – رمز إعادة تعيين كلمة المرور / Password reset code",
                 body=(
-                    f"مرحبًا {user.full_name}،\n\nلإعادة تعيين كلمة المرور افتح الرابط التالي "
-                    f"(صالح لمدة {ttl} دقيقة):\n{link}\n\n"
-                    f"Use the link above to reset your password. It expires in {ttl} minutes.\n"
-                    "If you did not request this, ignore this e-mail."
+                    f"مرحبًا {user.full_name}،\\n\\nرمز إعادة تعيين كلمة المرور هو: {code}\\n"
+                    f"صلاحية الرمز {ttl} دقائق. لا تشارك هذا الرمز مع أي شخص.\\n\\n"
+                    f"Your StockFlow password reset code is: {code}\\n"
+                    f"It expires in {ttl} minutes. Do not share this code with anyone."
                 ),
             )
         )
 
-    async def reset_password(self, raw_token: str, new_password: str) -> None:
-        now = datetime.now(UTC)
-        token = (
-            await self.db.execute(
-                select(PasswordResetToken)
-                .where(
-                    PasswordResetToken.token_hash == security.hash_token(raw_token),
-                    PasswordResetToken.purpose == "password_reset",
-                )
-                .with_for_update()
-            )
+    async def reset_password(self, email: str, code: str, new_password: str) -> None:
+        normalized = email.lower()
+        await rate_limit.hit(
+            self.redis, "password-reset-otp", normalized, limit=5, window=600
+        )
+        user = (
+            await self.db.execute(select(User).where(User.email == normalized))
         ).scalar_one_or_none()
-        if token is None or token.used_at is not None or token.expires_at <= now:
-            raise AppError("This reset link is invalid or has expired", code="INVALID_RESET_TOKEN")
-        user = await self.db.get(User, token.user_id)
-        if user is None or not user.is_active:
-            raise AppError("This reset link is invalid or has expired", code="INVALID_RESET_TOKEN")
+        now = datetime.now(UTC)
+        token = None
+        if user is not None and user.is_active:
+            token = (
+                await self.db.execute(
+                    select(PasswordResetToken)
+                    .where(
+                        PasswordResetToken.user_id == user.id,
+                        PasswordResetToken.purpose == "password_reset",
+                        PasswordResetToken.used_at.is_(None),
+                        PasswordResetToken.expires_at > now,
+                    )
+                    .order_by(PasswordResetToken.created_at.desc())
+                    .limit(1)
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+        expected = (
+            hmac.new(
+                self.settings.jwt_secret_key.encode(),
+                f"{user.id}:{code}".encode(),
+                hashlib.sha256,
+            ).hexdigest()
+            if user is not None
+            else "0" * 64
+        )
+        if token is None or not hmac.compare_digest(token.token_hash, expected):
+            raise AppError("This reset code is invalid or has expired", code="INVALID_RESET_TOKEN")
+
         user.password_hash = await security.hash_password(new_password)
-        user.email_verified = True  # the link proved control of the mailbox
+        user.email_verified = True  # the OTP proves control of the mailbox
         token.used_at = now
-        await self._revoke_sessions(user.id, "password_reset")  # sign out everywhere
+        await self._revoke_sessions(user.id, "password_reset")
         await rate_limit.reset(self.redis, "login-fail", user.email.lower())
+        await rate_limit.reset(self.redis, "password-reset-otp", normalized)
 
     async def change_password(self, principal: Principal, current: str, new: str) -> int:
         if not await security.verify_password(principal.user.password_hash, current):
