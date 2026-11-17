@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -36,7 +36,7 @@ function PasswordResetFlow() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function sendCode(event: React.FormEvent<HTMLFormElement>) {
+  async function sendCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setBusy(true);
