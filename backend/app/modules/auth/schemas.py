@@ -37,7 +37,8 @@ class ForgotPasswordRequest(_Strict):
 
 
 class ResetPasswordRequest(_Strict):
-    token: Annotated[str, StringConstraints(min_length=20, max_length=200)]
+    email: EmailStr
+    code: Annotated[str, StringConstraints(pattern=r"^\\d{6}$")]
     new_password: Password
 
 
