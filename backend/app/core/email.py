@@ -4,6 +4,7 @@ on hosts that block outbound SMTP. In tests, messages are captured in outbox.
 
 import json
 import logging
+import re
 import smtplib
 import ssl
 from dataclasses import dataclass
@@ -64,8 +65,15 @@ def send_via_resend(email: Email) -> None:
             if response.status < 200 or response.status >= 300:
                 raise RuntimeError(f"Resend API returned HTTP {response.status}")
     except HTTPError as exc:
-        # Never log the request payload: it contains the recipient and reset code.
-        raise RuntimeError(f"Resend API returned HTTP {exc.code}") from None
+        # Read only the provider error, never the request payload (which contains the OTP).
+        # Redact email addresses because Resend may echo the account address in its message.
+        try:
+            provider_error = json.loads(exc.read(2048).decode("utf-8"))
+            detail = str(provider_error.get("message") or provider_error.get("name") or "No error detail")
+        except Exception:
+            detail = "No readable error detail"
+        detail = re.sub(r"[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}", "[redacted email]", detail)
+        raise RuntimeError(f"Resend API returned HTTP {exc.code}: {detail}") from None
     except (URLError, TimeoutError, OSError) as exc:
         raise RuntimeError(f"Resend HTTPS request failed: {type(exc).__name__}") from None
 
