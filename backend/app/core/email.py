@@ -7,6 +7,8 @@ import ssl
 from dataclasses import dataclass
 from email.message import EmailMessage
 
+from anyio import to_thread
+
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -46,3 +48,15 @@ def deliver(email: Email) -> None:
         send_email_task.delay(email.to, email.subject, email.body)
     except Exception:
         logger.exception("Could not queue e-mail")
+
+
+async def deliver_direct(email: Email) -> None:
+    """Send immediately through SMTP (used by flows that must not depend on Celery)."""
+    if get_settings().app_env == "test":
+        outbox.append(email)
+        return
+    try:
+        await to_thread.run_sync(send_now, email)
+    except Exception:
+        # Do not log the message body: it may contain a one-time password.
+        logger.exception("Could not send e-mail directly")
