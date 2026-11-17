@@ -150,7 +150,7 @@ async def forgot_password(
     data: ForgotPasswordRequest, service: AuthService = Depends(get_auth_service)
 ):
     await service.forgot_password(data.email)
-    return ok(None, "If the email is registered, a reset link has been sent")
+    return ok(None, "If the email is registered, a reset code has been sent")
 
 
 @router.post(
@@ -161,7 +161,7 @@ async def forgot_password(
 async def reset_password(
     data: ResetPasswordRequest, service: AuthService = Depends(get_auth_service)
 ):
-    await service.reset_password(data.token, data.new_password)
+    await service.reset_password(data.email, data.code, data.new_password)
     return ok(None, "Password updated. Please sign in again")
 
 
