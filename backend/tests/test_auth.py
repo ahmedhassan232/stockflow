@@ -254,46 +254,51 @@ async def test_forgot_and_reset_password_flow(app, client):
     r1 = await client.post(f"{API}/auth/forgot-password", json={"email": owner.email})
     r2 = await client.post(f"{API}/auth/forgot-password", json={"email": "ghost@example.com"})
     assert r1.status_code == r2.status_code == 200 and r1.json() == r2.json()
-    assert (
-        len(email_module.outbox) == 2 and email_module.outbox[-1].to == owner.email
-    )  # [0] = verification mail
-    token = re.search(r"token=([\w-]+)", email_module.outbox[-1].body).group(1)
-    assert await _db("SELECT 1 FROM password_reset_tokens WHERE token_hash = :t", t=token) == []
+    assert len(email_module.outbox) == 2 and email_module.outbox[-1].to == owner.email
+    code = re.search(r"(?<!\\d)\\d{6}(?!\\d)", email_module.outbox[-1].body).group()
+    stored = await _db(
+        "SELECT token_hash FROM password_reset_tokens WHERE user_id = :u AND purpose = 'password_reset'",
+        u=owner.user_id,
+    )
+    assert len(stored) == 1 and stored[0]["token_hash"] != code and len(stored[0]["token_hash"]) == 64
 
     new_password = "a brand new passphrase"
     weak = await client.post(
-        f"{API}/auth/reset-password", json={"token": token, "new_password": "x"}
+        f"{API}/auth/reset-password",
+        json={"email": owner.email, "code": code, "new_password": "x"},
     )
     assert weak.status_code == 422
     done = await client.post(
-        f"{API}/auth/reset-password", json={"token": token, "new_password": new_password}
+        f"{API}/auth/reset-password",
+        json={"email": owner.email, "code": code, "new_password": new_password},
     )
     assert done.status_code == 200
 
-    # Every existing session is signed out; old password is dead; link is single-use.
+    # Every existing session is signed out; old password is dead; OTP is single-use.
     assert (await client.get(f"{API}/auth/me", headers=owner.h)).status_code == 401
     assert (await owner.client.post(f"{API}/auth/refresh")).status_code == 401
     old = await client.post(f"{API}/auth/login", json={"email": owner.email, "password": PASSWORD})
     assert old.status_code == 401
     again = await client.post(
-        f"{API}/auth/reset-password", json={"token": token, "new_password": "yet another phrase"}
+        f"{API}/auth/reset-password",
+        json={"email": owner.email, "code": code, "new_password": "yet another phrase"},
     )
     assert again.status_code == 400 and again.json()["error"]["code"] == "INVALID_RESET_TOKEN"
     await login(app, owner.email, new_password)
 
 
-async def test_expired_reset_link_is_rejected(app, client):
+async def test_expired_reset_otp_is_rejected(app, client):
     owner = await register_company(app)
     await client.post(f"{API}/auth/forgot-password", json={"email": owner.email})
-    token = re.search(r"token=([\w-]+)", email_module.outbox[-1].body).group(1)
+    code = re.search(r"(?<!\\d)\\d{6}(?!\\d)", email_module.outbox[-1].body).group()
     await _db(
         "UPDATE password_reset_tokens SET expires_at = now() - interval '1 second' "
-        "WHERE user_id = :u",
+        "WHERE user_id = :u AND purpose = 'password_reset'",
         u=owner.user_id,
     )
     r = await client.post(
         f"{API}/auth/reset-password",
-        json={"token": token, "new_password": "a brand new passphrase"},
+        json={"email": owner.email, "code": code, "new_password": "a brand new passphrase"},
     )
     assert r.status_code == 400
 
