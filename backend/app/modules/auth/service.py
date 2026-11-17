@@ -439,9 +439,9 @@ class AuthService:
                 to=user.email,
                 subject="StockFlow – رمز إعادة تعيين كلمة المرور / Password reset code",
                 body=(
-                    f"مرحبًا {user.full_name}،\\n\\nرمز إعادة تعيين كلمة المرور هو: {code}\\n"
-                    f"صلاحية الرمز {ttl} دقائق. لا تشارك هذا الرمز مع أي شخص.\\n\\n"
-                    f"Your StockFlow password reset code is: {code}\\n"
+                    f"مرحبًا {user.full_name}،\n\nرمز إعادة تعيين كلمة المرور هو: {code}\n"
+                    f"صلاحية الرمز {ttl} دقائق. لا تشارك هذا الرمز مع أي شخص.\n\n"
+                    f"Your StockFlow password reset code is: {code}\n"
                     f"It expires in {ttl} minutes. Do not share this code with anyone."
                 ),
             )
