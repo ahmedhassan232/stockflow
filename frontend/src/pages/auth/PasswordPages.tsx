@@ -50,7 +50,7 @@ function PasswordResetFlow() {
     }
   }
 
-  async function submitReset(event: React.FormEvent<HTMLFormElement>) {
+  async function submitReset(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     if (!/^\d{6}$/.test(code)) {
