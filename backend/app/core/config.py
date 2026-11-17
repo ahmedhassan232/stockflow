@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     smtp_username: str = ""
     smtp_password: str = ""
     smtp_starttls: bool = False
+    resend_api_key: str = ""
+    resend_from: str = "StockFlow <onboarding@resend.dev>"
 
     @property
     def cors_origin_list(self) -> list[str]:
