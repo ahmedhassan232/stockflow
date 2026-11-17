@@ -255,7 +255,7 @@ async def test_forgot_and_reset_password_flow(app, client):
     r2 = await client.post(f"{API}/auth/forgot-password", json={"email": "ghost@example.com"})
     assert r1.status_code == r2.status_code == 200 and r1.json() == r2.json()
     assert len(email_module.outbox) == 2 and email_module.outbox[-1].to == owner.email
-    code = re.search(r"(?<!\\d)\\d{6}(?!\\d)", email_module.outbox[-1].body).group()
+    code = re.search(r"(?<!\d)\d{6}(?!\d)", email_module.outbox[-1].body).group()
     stored = await _db(
         "SELECT token_hash FROM password_reset_tokens WHERE user_id = :u AND purpose = 'password_reset'",
         u=owner.user_id,
@@ -290,7 +290,7 @@ async def test_forgot_and_reset_password_flow(app, client):
 async def test_expired_reset_otp_is_rejected(app, client):
     owner = await register_company(app)
     await client.post(f"{API}/auth/forgot-password", json={"email": owner.email})
-    code = re.search(r"(?<!\\d)\\d{6}(?!\\d)", email_module.outbox[-1].body).group()
+    code = re.search(r"(?<!\d)\d{6}(?!\d)", email_module.outbox[-1].body).group()
     await _db(
         "UPDATE password_reset_tokens SET expires_at = now() - interval '1 second' "
         "WHERE user_id = :u AND purpose = 'password_reset'",
