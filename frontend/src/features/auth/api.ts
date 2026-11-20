@@ -1,4 +1,4 @@
-import { api, refreshSession } from "@/services/api";
+import { api, ensureBackendReady, refreshSession } from "@/services/api";
 import type { ApiSuccess } from "@/types/api";
 import { useAuth } from "./store";
 import type { AuthPayload, Me } from "./types";
@@ -17,6 +17,7 @@ async function adopt(payload: AuthPayload): Promise<Me> {
 /** Restores the session from the HttpOnly refresh cookie on page load. */
 export async function bootstrapSession(): Promise<void> {
   try {
+    await ensureBackendReady();
     await refreshSession();
     await fetchMe();
   } catch {
@@ -25,6 +26,7 @@ export async function bootstrapSession(): Promise<void> {
 }
 
 export async function login(email: string, password: string): Promise<Me> {
+  await ensureBackendReady();
   const res = await api.post<ApiSuccess<AuthPayload>>("/auth/login", { email, password });
   return adopt(res.data.data);
 }
@@ -36,6 +38,7 @@ export interface RegisterInput {
   company: { name: string; slug: string };
 }
 export async function registerCompany(input: RegisterInput): Promise<Me> {
+  await ensureBackendReady();
   const res = await api.post<ApiSuccess<AuthPayload>>("/auth/register", input);
   return adopt(res.data.data);
 }
