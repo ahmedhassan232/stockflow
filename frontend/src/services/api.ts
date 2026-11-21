@@ -52,8 +52,9 @@ export function ensureBackendReady(): Promise<void> {
       let lastError: unknown;
 
       for (let attempt = 0; attempt < delays.length; attempt += 1) {
-        if (delays[attempt] > 0) {
-          await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+        const delay = delays[attempt] ?? 0;
+        if (delay > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delay));
         }
 
         try {
