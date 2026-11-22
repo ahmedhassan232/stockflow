@@ -61,7 +61,7 @@ def send_via_resend(email: Email) -> None:
         method="POST",
     )
     try:
-        with urlopen(request, timeout=15) as response:
+        with urlopen(request, timeout=15) as response:  # noqa: S310 - fixed trusted HTTPS API URL
             if response.status < 200 or response.status >= 300:
                 raise RuntimeError(f"Resend API returned HTTP {response.status}")
     except HTTPError as exc:
@@ -69,7 +69,9 @@ def send_via_resend(email: Email) -> None:
         # Redact email addresses because Resend may echo the account address in its message.
         try:
             provider_error = json.loads(exc.read(2048).decode("utf-8"))
-            detail = str(provider_error.get("message") or provider_error.get("name") or "No error detail")
+            detail = str(
+                provider_error.get("message") or provider_error.get("name") or "No error detail"
+            )
         except Exception:
             detail = "No readable error detail"
         detail = re.sub(r"[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}", "[redacted email]", detail)
