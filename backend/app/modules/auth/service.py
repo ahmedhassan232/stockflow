@@ -399,9 +399,7 @@ class AuthService:
     async def forgot_password(self, email: str) -> None:
         """Send a short-lived OTP without revealing whether an account exists."""
         normalized = email.lower()
-        await rate_limit.hit(
-            self.redis, "password-reset-request", normalized, limit=3, window=3600
-        )
+        await rate_limit.hit(self.redis, "password-reset-request", normalized, limit=3, window=3600)
         user = (
             await self.db.execute(select(User).where(User.email == normalized))
         ).scalar_one_or_none()
@@ -449,9 +447,7 @@ class AuthService:
 
     async def reset_password(self, email: str, code: str, new_password: str) -> None:
         normalized = email.lower()
-        await rate_limit.hit(
-            self.redis, "password-reset-otp", normalized, limit=5, window=600
-        )
+        await rate_limit.hit(self.redis, "password-reset-otp", normalized, limit=5, window=600)
         user = (
             await self.db.execute(select(User).where(User.email == normalized))
         ).scalar_one_or_none()
