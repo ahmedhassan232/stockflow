@@ -1,3 +1,4 @@
+import axios from "axios";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -37,6 +38,7 @@ function renderAt(path: string) {
 describe("authentication UI", () => {
   beforeEach(async () => {
     vi.restoreAllMocks();
+    vi.spyOn(axios, "get").mockResolvedValue({} as never);
     useAuth.setState({ status: "anonymous", accessToken: null, me: null });
     await i18n.changeLanguage("ar");
   });
