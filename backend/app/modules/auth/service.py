@@ -478,7 +478,7 @@ class AuthService:
         else:
             if normalized is None or code is None:
                 raise AppError(
-                    "This reset code is invalid or has expired", code="INVALID_RESET_TOKEN"
+                    "Invalid or expired reset credential", code="INVALID_RESET_TOKEN"
                 )
             await rate_limit.hit(self.redis, "password-reset-otp", normalized, limit=5, window=600)
             user = (
@@ -515,12 +515,12 @@ class AuthService:
                 or not hmac.compare_digest(reset_token.token_hash, expected)
             ):
                 raise AppError(
-                    "This reset code is invalid or has expired", code="INVALID_RESET_TOKEN"
+                    "Invalid or expired reset credential", code="INVALID_RESET_TOKEN"
                 )
 
         if reset_token is None or user is None or not user.is_active:
             raise AppError(
-                "This reset code is invalid or has expired", code="INVALID_RESET_TOKEN"
+                "Invalid or expired reset credential", code="INVALID_RESET_TOKEN"
             )
 
         user.password_hash = await security.hash_password(new_password)
