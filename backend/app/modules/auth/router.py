@@ -161,7 +161,7 @@ async def forgot_password(
 async def reset_password(
     data: ResetPasswordRequest, service: AuthService = Depends(get_auth_service)
 ):
-    await service.reset_password(data.email, data.code, data.new_password)
+    await service.reset_password(data.email, data.code, data.new_password, data.token)
     return ok(None, "Password updated. Please sign in again")
 
 

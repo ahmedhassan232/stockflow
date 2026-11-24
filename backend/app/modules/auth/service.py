@@ -445,47 +445,87 @@ class AuthService:
             )
         )
 
-    async def reset_password(self, email: str, code: str, new_password: str) -> None:
-        normalized = email.lower()
-        await rate_limit.hit(self.redis, "password-reset-otp", normalized, limit=5, window=600)
-        user = (
-            await self.db.execute(select(User).where(User.email == normalized))
-        ).scalar_one_or_none()
+    async def reset_password(
+        self, email: str | None, code: str | None, new_password: str, token: str | None = None
+    ) -> None:
         now = datetime.now(UTC)
-        token = None
-        if user is not None and user.is_active:
-            token = (
+        normalized = email.lower() if email else None
+        reset_token = None
+        user = None
+        token_digest = None
+
+        if token is not None:
+            # Employee invitations use a high-entropy opaque token; verification tokens
+            # remain isolated by purpose and can never be used to set a password.
+            token_digest = security.hash_token(token)
+            await rate_limit.hit(
+                self.redis, "password-reset-invite", token_digest, limit=5, window=600
+            )
+            reset_token = (
                 await self.db.execute(
                     select(PasswordResetToken)
                     .where(
-                        PasswordResetToken.user_id == user.id,
+                        PasswordResetToken.token_hash == token_digest,
                         PasswordResetToken.purpose == "password_reset",
                         PasswordResetToken.used_at.is_(None),
                         PasswordResetToken.expires_at > now,
                     )
-                    .order_by(PasswordResetToken.created_at.desc())
-                    .limit(1)
                     .with_for_update()
                 )
             ).scalar_one_or_none()
-        expected = (
-            hmac.new(
-                self.settings.jwt_secret_key.encode(),
-                f"{user.id}:{code}".encode(),
-                hashlib.sha256,
-            ).hexdigest()
-            if user is not None
-            else "0" * 64
-        )
-        if token is None or not hmac.compare_digest(token.token_hash, expected):
+            if reset_token is not None:
+                user = await self.db.get(User, reset_token.user_id)
+        else:
+            if normalized is None or code is None:
+                raise AppError("This reset code is invalid or has expired", code="INVALID_RESET_TOKEN")
+            await rate_limit.hit(self.redis, "password-reset-otp", normalized, limit=5, window=600)
+            user = (
+                await self.db.execute(select(User).where(User.email == normalized))
+            ).scalar_one_or_none()
+            if user is not None and user.is_active:
+                reset_token = (
+                    await self.db.execute(
+                        select(PasswordResetToken)
+                        .where(
+                            PasswordResetToken.user_id == user.id,
+                            PasswordResetToken.purpose == "password_reset",
+                            PasswordResetToken.used_at.is_(None),
+                            PasswordResetToken.expires_at > now,
+                        )
+                        .order_by(PasswordResetToken.created_at.desc())
+                        .limit(1)
+                        .with_for_update()
+                    )
+                ).scalar_one_or_none()
+            expected = (
+                hmac.new(
+                    self.settings.jwt_secret_key.encode(),
+                    f"{user.id}:{code}".encode(),
+                    hashlib.sha256,
+                ).hexdigest()
+                if user is not None
+                else "0" * 64
+            )
+            if (
+                reset_token is None
+                or user is None
+                or not user.is_active
+                or not hmac.compare_digest(reset_token.token_hash, expected)
+            ):
+                raise AppError("This reset code is invalid or has expired", code="INVALID_RESET_TOKEN")
+
+        if reset_token is None or user is None or not user.is_active:
             raise AppError("This reset code is invalid or has expired", code="INVALID_RESET_TOKEN")
 
         user.password_hash = await security.hash_password(new_password)
-        user.email_verified = True  # the OTP proves control of the mailbox
-        token.used_at = now
+        user.email_verified = True  # the OTP or invitation link proves control of the mailbox
+        reset_token.used_at = now
         await self._revoke_sessions(user.id, "password_reset")
         await rate_limit.reset(self.redis, "login-fail", user.email.lower())
-        await rate_limit.reset(self.redis, "password-reset-otp", normalized)
+        if normalized is not None:
+            await rate_limit.reset(self.redis, "password-reset-otp", normalized)
+        if token_digest is not None:
+            await rate_limit.reset(self.redis, "password-reset-invite", token_digest)
 
     async def change_password(self, principal: Principal, current: str, new: str) -> int:
         if not await security.verify_password(principal.user.password_hash, current):

@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { TextField } from "@/components/ui/input";
-import { forgotPassword, resetPassword } from "@/features/auth/api";
+import { forgotPassword, resetPassword, resetPasswordWithToken } from "@/features/auth/api";
 import { AuthHeading, FormError } from "@/layouts/AuthLayout";
 import { errorMessage } from "@/utils/errors";
 
@@ -26,7 +26,7 @@ function Notice({ children }: { children: string }) {
   );
 }
 
-function PasswordResetFlow() {
+function PasswordResetFlow({ inviteToken }: { inviteToken?: string | null }) {
   const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -53,7 +53,7 @@ function PasswordResetFlow() {
   async function submitReset(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    if (!/^\d{6}$/.test(code)) {
+    if (!inviteToken && !/^\d{6}$/.test(code)) {
       setError(t("auth.codeInvalid"));
       return;
     }
@@ -63,7 +63,8 @@ function PasswordResetFlow() {
     }
     setBusy(true);
     try {
-      await resetPassword(email.trim(), code, password);
+      if (inviteToken) await resetPasswordWithToken(inviteToken, password);
+      else await resetPassword(email.trim(), code, password);
       setDone(true);
     } catch (err) {
       setError(errorMessage(err, t));
@@ -75,11 +76,28 @@ function PasswordResetFlow() {
   return (
     <>
       <AuthHeading
-        title={t(done ? "auth.resetTitle" : "auth.forgotTitle")}
-        subtitle={t(done ? "auth.resetSubtitle" : sent ? "auth.codeSubtitle" : "auth.forgotSubtitle")}
+        title={t(done || inviteToken ? "auth.resetTitle" : "auth.forgotTitle")}
+        subtitle={t(done || inviteToken ? "auth.resetSubtitle" : sent ? "auth.codeSubtitle" : "auth.forgotSubtitle")}
       />
       {done ? (
         <Notice>{t("auth.resetDone")}</Notice>
+      ) : inviteToken ? (
+        <form onSubmit={submitReset} className="space-y-4">
+          <FormError message={error} />
+          <TextField
+            label={t("auth.newPassword")}
+            type="password"
+            dir="ltr"
+            autoComplete="new-password"
+            required
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            hint={t("auth.passwordHint")}
+          />
+          <Button type="submit" className="w-full" disabled={busy || password.length < 10}>
+            {busy ? t("auth.resetting") : t("auth.savePassword")}
+          </Button>
+        </form>
       ) : !sent ? (
         <form onSubmit={sendCode} className="space-y-4">
           <FormError message={error} />
@@ -153,5 +171,6 @@ export function ForgotPasswordPage() {
 }
 
 export function ResetPasswordPage() {
-  return <PasswordResetFlow />;
+  const [searchParams] = useSearchParams();
+  return <PasswordResetFlow inviteToken={searchParams.get("token")} />;
 }

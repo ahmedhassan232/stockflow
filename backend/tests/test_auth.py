@@ -260,9 +260,9 @@ async def test_forgot_and_reset_password_flow(app, client):
         "SELECT token_hash FROM password_reset_tokens WHERE user_id = :u AND purpose = 'password_reset'",
         u=owner.user_id,
     )
-    assert (
-        len(stored) == 1 and stored[0]["token_hash"] != code and len(stored[0]["token_hash"]) == 64
-    )
+    assert len(stored) == 1
+    stored_hash = stored[0][0]
+    assert stored_hash != code and len(stored_hash) == 64
 
     new_password = "a brand new passphrase"
     weak = await client.post(

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, model_validator
 
 from app.modules.tenants.schemas import TenantCreate
 
@@ -37,9 +37,19 @@ class ForgotPasswordRequest(_Strict):
 
 
 class ResetPasswordRequest(_Strict):
-    email: EmailStr
-    code: Annotated[str, StringConstraints(pattern=r"^\d{6}$")]
+    email: EmailStr | None = None
+    code: Annotated[str, StringConstraints(pattern=r"^\d{6}$")] | None = None
+    token: Annotated[str, StringConstraints(min_length=20, max_length=200)] | None = None
     new_password: Password
+
+    @model_validator(mode="after")
+    def validate_reset_method(self):
+        if self.token is not None:
+            if self.email is not None or self.code is not None:
+                raise ValueError("Use either an invitation token or an email and reset code")
+        elif self.email is None or self.code is None:
+            raise ValueError("Email and six-digit code are required")
+        return self
 
 
 class ChangePasswordRequest(_Strict):
