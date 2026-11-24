@@ -477,9 +477,7 @@ class AuthService:
                 user = await self.db.get(User, reset_token.user_id)
         else:
             if normalized is None or code is None:
-                raise AppError(
-                    "Invalid or expired reset credential", code="INVALID_RESET_TOKEN"
-                )
+                raise AppError("Invalid or expired reset credential", code="INVALID_RESET_TOKEN")
             await rate_limit.hit(self.redis, "password-reset-otp", normalized, limit=5, window=600)
             user = (
                 await self.db.execute(select(User).where(User.email == normalized))
@@ -514,14 +512,10 @@ class AuthService:
                 or not user.is_active
                 or not hmac.compare_digest(reset_token.token_hash, expected)
             ):
-                raise AppError(
-                    "Invalid or expired reset credential", code="INVALID_RESET_TOKEN"
-                )
+                raise AppError("Invalid or expired reset credential", code="INVALID_RESET_TOKEN")
 
         if reset_token is None or user is None or not user.is_active:
-            raise AppError(
-                "Invalid or expired reset credential", code="INVALID_RESET_TOKEN"
-            )
+            raise AppError("Invalid or expired reset credential", code="INVALID_RESET_TOKEN")
 
         user.password_hash = await security.hash_password(new_password)
         user.email_verified = True  # the OTP or invitation link proves control of the mailbox
