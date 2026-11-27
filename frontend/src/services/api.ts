@@ -68,6 +68,11 @@ export function ensureBackendReady(): Promise<void> {
         } catch (error) {
           lastError = error;
           const status = error instanceof AxiosError ? error.response?.status : undefined;
+          const gate = error instanceof AxiosError ? error.response?.headers?.["x-blitz-gate"] : undefined;
+          if (gate === "asleep") {
+            lastError = new ApiError("BACKEND_ASLEEP", "The hosting gate has put the backend to sleep.", status);
+            break;
+          }
           const retryable = status === undefined || [502, 503, 504].includes(status);
           if (!retryable || attempt === delays.length - 1) break;
         }
