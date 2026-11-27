@@ -36,6 +36,57 @@ export function toApiError(err: unknown): ApiError {
   return new ApiError("UNKNOWN_ERROR", err instanceof Error ? err.message : "Unknown error");
 }
 
+/**
+ * Wake a sleeping backend before auth requests.
+ *
+ * Some hosting plans pause idle services. A readiness request starts the service;
+ * bounded retries give it time to become healthy without asking the user to open
+ * the health URL manually. Concurrent callers share the same wake-up attempt.
+ */
+let backendReady: Promise<void> | null = null;
+
+export function ensureBackendReady(): Promise<void> {
+  if (!backendReady) {
+    backendReady = (async () => {
+      const delays = [0, 1_500, 3_000, 5_000, 8_000, 10_000, 10_000];
+      let lastError: unknown;
+
+      for (let attempt = 0; attempt < delays.length; attempt += 1) {
+        const delay = delays[attempt] ?? 0;
+        if (delay > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+
+        try {
+          const baseURL = (api.defaults.baseURL ?? "/api/v1").replace(/\/+$/, "");
+          await axios.get(`${baseURL}/health/ready`, {
+            timeout: 10_000,
+            withCredentials: true,
+            headers: { Accept: "application/json" },
+          });
+          return;
+        } catch (error) {
+          lastError = error;
+          const status = error instanceof AxiosError ? error.response?.status : undefined;
+          const gate = error instanceof AxiosError ? error.response?.headers?.["x-blitz-gate"] : undefined;
+          if (gate === "asleep") {
+            lastError = new ApiError("BACKEND_ASLEEP", "The hosting gate has put the backend to sleep.", status);
+            break;
+          }
+          const retryable = status === undefined || [502, 503, 504].includes(status);
+          if (!retryable || attempt === delays.length - 1) break;
+        }
+      }
+
+      throw toApiError(lastError);
+    })().finally(() => {
+      backendReady = null;
+    });
+  }
+
+  return backendReady;
+}
+
 api.interceptors.request.use((config) => {
   const token = useAuth.getState().accessToken;
   if (token) config.headers.set("Authorization", `Bearer ${token}`);

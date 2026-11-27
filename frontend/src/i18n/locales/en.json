@@ -171,7 +171,8 @@
     "INVALID_PERMISSION": "Unknown permission",
     "INVALID_TIMEZONE": "Unknown time zone",
     "FUTURE_DATE": "An expense cannot be dated in the future",
-    "INVALID_VERIFY_TOKEN": "The confirmation link is invalid or expired"
+    "INVALID_VERIFY_TOKEN": "The confirmation link is invalid or expired",
+    "BACKEND_ASLEEP": "The hosting provider has put the backend to sleep. Open its health URL in a browser to wake it, then retry: https://stockflow-backend.ahmedhassan.prod.page/api/v1/health/ready"
   },
   "org": {
     "overviewTitle": "Welcome, {{name}}",

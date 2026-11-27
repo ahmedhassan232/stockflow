@@ -171,7 +171,8 @@
     "INVALID_PERMISSION": "صلاحية غير معروفة",
     "INVALID_TIMEZONE": "منطقة زمنية غير معروفة",
     "FUTURE_DATE": "لا يمكن تسجيل مصروف بتاريخ مستقبلي",
-    "INVALID_VERIFY_TOKEN": "رابط التأكيد غير صالح أو منتهي"
+    "INVALID_VERIFY_TOKEN": "رابط التأكيد غير صالح أو منتهي",
+    "BACKEND_ASLEEP": "الخادم نائم لدى الاستضافة. افتح رابط الصحة في المتصفح لإيقاظه ثم حاول مرة أخرى: https://stockflow-backend.ahmedhassan.prod.page/api/v1/health/ready"
   },
   "org": {
     "overviewTitle": "مرحبًا، {{name}}",
