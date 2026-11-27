@@ -14,7 +14,7 @@ it("stops retrying when the hosting gate reports an asleep backend", async () =>
     statusText: "Service Unavailable",
     headers: { "x-blitz-gate": "asleep" },
     config: { headers: {} },
-  } as AxiosResponse;
+  } as unknown as AxiosResponse;
 
   const request = vi.spyOn(axios, "get").mockRejectedValue(error);
 
